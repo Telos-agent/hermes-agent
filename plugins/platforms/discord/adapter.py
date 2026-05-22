@@ -706,6 +706,22 @@ class DiscordAdapter(BasePlatformAdapter):
             async def on_ready():
                 logger.info("[%s] Connected as %s", adapter_self.name, adapter_self._client.user)
 
+                # EXPECTED_BOT_ID guard — fail closed if the token resolves to
+                # a different bot than configured. Protects against double-bot
+                # presence races (e.g. native + containerized Telos with the
+                # wrong tokens swapped). Opt-in: only enforced when
+                # DISCORD_EXPECTED_BOT_ID is set in the environment.
+                actual_user = adapter_self._client.user
+                actual_id = getattr(actual_user, "id", None)
+                if not adapter_self._check_expected_bot_id(
+                    env_var="DISCORD_EXPECTED_BOT_ID",
+                    actual_id=actual_id,
+                    actual_label=str(actual_user),
+                    logger_=logger,
+                ):
+                    await adapter_self._client.close()
+                    return
+
                 # Resolve any usernames in the allowed list to numeric IDs
                 await adapter_self._resolve_allowed_usernames()
                 adapter_self._ready_event.set()

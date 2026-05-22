@@ -1471,6 +1471,40 @@ class TelegramAdapter(BasePlatformAdapter):
                         raise
             await self._app.start()
 
+            # EXPECTED_BOT_ID guard — fail closed if the token resolves to a
+            # different bot than configured. Protects against double-bot
+            # presence races (e.g. native + containerized Telos with the wrong
+            # tokens swapped). Opt-in: only enforced when
+            # TELEGRAM_EXPECTED_BOT_ID is set in the environment.
+            if os.getenv("TELEGRAM_EXPECTED_BOT_ID", "").strip():
+                try:
+                    me = await self._app.bot.get_me()
+                except Exception as get_me_err:
+                    message = (
+                        f"TELEGRAM_EXPECTED_BOT_ID guard could not call "
+                        f"get_me() to verify identity: {get_me_err}. Refusing "
+                        f"to start."
+                    )
+                    logger.error("[%s] %s", self.name, message, exc_info=True)
+                    self._set_fatal_error(
+                        "telegram_get_me_failed", message, retryable=True,
+                    )
+                    self._release_platform_lock()
+                    return False
+                actual_id = getattr(me, "id", None)
+                actual_label = f"@{getattr(me, 'username', '?')}"
+            else:
+                actual_id = None
+                actual_label = ""
+            if not self._check_expected_bot_id(
+                env_var="TELEGRAM_EXPECTED_BOT_ID",
+                actual_id=actual_id,
+                actual_label=actual_label,
+                logger_=logger,
+            ):
+                self._release_platform_lock()
+                return False
+
             # Decide between webhook and polling mode
             webhook_url = os.getenv("TELEGRAM_WEBHOOK_URL", "").strip()
 

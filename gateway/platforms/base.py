@@ -1458,6 +1458,71 @@ class BasePlatformAdapter(ABC):
         self._fatal_error_retryable = retryable
         self._write_runtime_status_safe("fatal", platform_state="fatal", error_code=code, error_message=message)
 
+    def _check_expected_bot_id(
+        self,
+        *,
+        env_var: str,
+        actual_id: Optional[int],
+        actual_label: str,
+        logger_: Any,
+    ) -> bool:
+        """Identity guard: verify the connected bot matches the expected ID.
+
+        Reads ``env_var`` from the environment. Returns True if the guard
+        passes (or is disabled because the env var is unset). Returns False
+        and sets a fatal error if the guard fails or the env var is malformed.
+
+        Opt-in: only enforced when the env var is set. When unset, a WARNING
+        is logged so operators see the protection is available. Codes set
+        when failing:
+          - ``<platform>_expected_bot_id_invalid`` — env var not an int (non-retryable)
+          - ``<platform>_bot_id_mismatch`` — id mismatch (non-retryable)
+
+        ``actual_label`` is included verbatim in the failure log line so the
+        platform-specific identity (e.g. ``Bot#1234`` or ``@username``) is
+        visible alongside the numeric id.
+
+        Primary use: prevent double-bot presence when the same identity is
+        running both natively and in a container with mismatched tokens.
+        """
+        expected_id_raw = os.getenv(env_var, "").strip()
+        platform_key = self.platform.value if hasattr(self.platform, "value") else str(self.platform)
+        if not expected_id_raw:
+            logger_.warning(
+                "[%s] %s not set — identity guard is disabled. Set it in .env "
+                "to prevent token-swap double-bot incidents.",
+                self.name, env_var,
+            )
+            return True
+        try:
+            expected_id = int(expected_id_raw)
+        except ValueError:
+            message = (
+                f"{env_var} is set but not a valid integer: "
+                f"{expected_id_raw!r}. Refusing to start."
+            )
+            logger_.error("[%s] %s", self.name, message)
+            self._set_fatal_error(
+                f"{platform_key}_expected_bot_id_invalid", message, retryable=False,
+            )
+            return False
+        if actual_id != expected_id:
+            message = (
+                f"{platform_key.capitalize()} identity mismatch: token "
+                f"resolves to bot id={actual_id} ({actual_label}) but "
+                f"{env_var}={expected_id}. Refusing to start to prevent "
+                f"double-bot presence."
+            )
+            logger_.error("[%s] %s", self.name, message)
+            self._set_fatal_error(
+                f"{platform_key}_bot_id_mismatch", message, retryable=False,
+            )
+            return False
+        logger_.info(
+            "[%s] %s guard passed (id=%s)", self.name, env_var, actual_id,
+        )
+        return True
+
     def _write_runtime_status_safe(self, context: str, **kwargs) -> None:
         """Write runtime status; log first failure per context at warning, rest at debug.
 
