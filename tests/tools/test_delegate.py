@@ -1496,9 +1496,10 @@ class TestChildCredentialPoolResolution(unittest.TestCase):
                 task_count=1,
             )
 
+        # Telos local: delegate_tool force-injects 'skills' on every subagent (commit e8fd74289).
         self.assertEqual(
             MockAgent.call_args[1]["enabled_toolsets"],
-            ["web", "browser", "mcp-MiniMax"],
+            ["web", "browser", "mcp-MiniMax", "skills"],
         )
 
     @patch(
@@ -1526,7 +1527,7 @@ class TestChildCredentialPoolResolution(unittest.TestCase):
 
         self.assertEqual(
             MockAgent.call_args[1]["enabled_toolsets"],
-            ["web", "browser"],
+            ["web", "browser", "skills"],
         )
 
 
