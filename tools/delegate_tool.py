@@ -608,19 +608,12 @@ def _build_child_system_prompt(
         "Be thorough but concise -- your response is returned to the "
         "parent agent as a summary."
     )
-    # Inject the Hermes skills inventory so subagents can auto-load relevant
-    # skills the same way the main session does. Without this, subagents
-    # solve tasks from training-data feel and ignore the procedural memory
-    # the operator has built up in ~/.hermes/skills/. The skills_prompt is
-    # cached on disk (.skills_prompt_snapshot.json) so this is cheap per call.
-    try:
-        from agent.prompt_builder import build_skills_system_prompt
-
-        skills_section = build_skills_system_prompt()
-        if skills_section and skills_section.strip():
-            parts.append("\n" + skills_section.strip())
-    except Exception as exc:  # pragma: no cover -- defensive only
-        logger.debug("Subagent skills-prompt injection failed: %s", exc)
+    # Skills inventory injection is handled by the canonical system-prompt
+    # builder (agent/system_prompt.py:build_system_prompt_parts), which fires
+    # when the child has skill tools available.  The 'skills' toolset is
+    # force-added to every subagent in _build_child_agent(), so the parent's
+    # exact skills-block (description, ordering, "MUST load" wording) is
+    # injected verbatim — symmetric posture, no hand-rolled paraphrase.
     if role == "orchestrator":
         child_note = (
             "Your own children MUST be leaves (cannot delegate further) "
@@ -979,6 +972,18 @@ def _build_child_agent(
     # test_intersection_preserves_delegation_bound test for the design rationale.
     if effective_role == "orchestrator" and "delegation" not in child_toolsets:
         child_toolsets.append("delegation")
+
+    # Skills toolset is force-added to every child, regardless of caller-supplied
+    # toolsets, so subagents spawn with the same skills posture as the parent:
+    # skill_view available, catalog injected by the canonical system-prompt
+    # builder (agent/system_prompt.py gates the skills block on
+    # has_skills_tools).  Without this, a caller passing toolsets=["terminal",
+    # "file"] would get a subagent that cannot load any procedural memory —
+    # which defeats the purpose of having skills at all.  Parallel to the
+    # orchestrator 'delegation' re-add above: capability granted by spawn
+    # contract, not inherited.
+    if "skills" not in child_toolsets:
+        child_toolsets.append("skills")
 
     workspace_hint = _resolve_workspace_hint(parent_agent)
     child_prompt = _build_child_system_prompt(
