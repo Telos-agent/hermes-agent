@@ -608,6 +608,19 @@ def _build_child_system_prompt(
         "Be thorough but concise -- your response is returned to the "
         "parent agent as a summary."
     )
+    # Inject the Hermes skills inventory so subagents can auto-load relevant
+    # skills the same way the main session does. Without this, subagents
+    # solve tasks from training-data feel and ignore the procedural memory
+    # the operator has built up in ~/.hermes/skills/. The skills_prompt is
+    # cached on disk (.skills_prompt_snapshot.json) so this is cheap per call.
+    try:
+        from agent.prompt_builder import build_skills_system_prompt
+
+        skills_section = build_skills_system_prompt()
+        if skills_section and skills_section.strip():
+            parts.append("\n" + skills_section.strip())
+    except Exception as exc:  # pragma: no cover -- defensive only
+        logger.debug("Subagent skills-prompt injection failed: %s", exc)
     if role == "orchestrator":
         child_note = (
             "Your own children MUST be leaves (cannot delegate further) "
