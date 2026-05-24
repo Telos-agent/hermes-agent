@@ -104,6 +104,11 @@ _PREFIX_PATTERNS = [
     r"mem0_[A-Za-z0-9]{10,}",           # Mem0 Platform API key
     r"brv_[A-Za-z0-9]{10,}",            # ByteRover API key
     r"xai-[A-Za-z0-9]{30,}",            # xAI (Grok) API key
+    r"glpat-[A-Za-z0-9_-]{10,}",        # GitLab Personal Access Token
+    r"gldt-[A-Za-z0-9_-]{10,}",         # GitLab Deploy Token
+    r"glptt-[A-Za-z0-9]{10,}",          # GitLab Project Trigger Token
+    r"glrt-[A-Za-z0-9_-]{10,}",         # GitLab Runner Registration Token
+    r"GR134[89][A-Za-z0-9_-]{10,}",     # GitLab Pipeline Token
 ]
 
 # ENV assignment patterns: KEY=value where KEY contains a secret-like name
